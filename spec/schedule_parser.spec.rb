@@ -67,13 +67,13 @@ describe ScheduleParser do
             <div class="coursenamemobiletable"><strong>Width Swim - Older Adult</strong> (60 yrs +)</div>
             <strong>Jan 3 to Jan 9 </strong>
           </td>
-          <td data-info="Sun"></td>
-          <td data-info="Mon"></td>
-          <td data-info="Tue"></td>
-          <td data-info="Wed"></td>
-          <td data-info="Thu"></td>
-          <td data-info="Fri"></td>
-          <td data-info="Sat"></td>
+          <td data-info="Sun"> &nbsp; </td>
+          <td data-info="Mon"> &nbsp; </td>
+          <td data-info="Tue"> &nbsp; </td>
+          <td data-info="Wed"> &nbsp; </td>
+          <td data-info="Thu"> &nbsp; </td>
+          <td data-info="Fri"> &nbsp; </td>
+          <td data-info="Sat"> &nbsp; </td>
         </tr>
       ''').css('tr')
       Time.stub :now, Time.parse('2020-12-26 00:00:00 -0500') do
@@ -132,7 +132,16 @@ describe ScheduleParser do
   describe Day do
     it 'Will fail if the day does not have valid day of week in data-info' do
       html = Nokogiri::HTML('<td data-info="Xyz">8 - 8:55am</td>').css('td')
-      _(-> { Day.new(html, Time.parse('September 6 2015')) }).must_raise UnexpectedHtmlContentException
+      _(-> { Day.new(html, Time.parse('September 6 2015')) }).must_raise StandardError
+    end
+
+    it 'Will produce nil when there are no times' do
+      html = Nokogiri::HTML('<td data-info="Tue"> &nbsp; </td>').css('td')
+      
+      TimeRange.stub :new, OpenStruct.new(to_json: true)   do
+        result = Day.new(html, Time.parse('July 1 2015'))
+        assert_nil(result.to_json)
+      end
     end
 
     it 'Can identify single time' do

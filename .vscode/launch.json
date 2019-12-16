@@ -5,10 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Local File",
+            "name": "Debug Tests",
             "type": "Ruby",
             "request": "launch",
             "program": "${workspaceRoot}/spec/schedule_parser.spec.rb",
+            "useBundler": true
+        },
+        {
+            "name": "Debug Local Test Run",
+            "type": "Ruby",
+            "request": "launch",
+            "program": "${workspaceRoot}/run_locally.rb",
             "useBundler": true
         }
     ]

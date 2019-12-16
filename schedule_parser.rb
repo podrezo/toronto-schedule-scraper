@@ -8,33 +8,33 @@ class ScheduleParser
   def self.parse_swim_times(url)
     doc = Nokogiri::HTML(open(url))
     locations = doc.css('.pfrProgramDescrList .pfrListing').map do |location_html|
-      Location.new(location_html)
+      Location.new(location_html).to_json
     end
   end
 end
 
 class UnexpectedHtmlContentException < StandardError
-  def initialize(parser_step="custom", html="This is a custom exception")
+  def initialize(msg, html, parser_step)
+    @html = html
     @parser_step = parser_step
-    super(html)
+    super(msg)
   end
 end
 
 class Location
   def initialize(html)
-    @html = html
-    raise UnexpectedHtmlContentException.new('location',html) unless valid?
+    valid?(html)
     @location_id = html.attribute('data-id').value
     @weeks = html.css('table tbody tr').map do |week_html|
       Week.new(week_html)
     end
   end
   
-  def valid?
-    headings = @html.css('table thead tr th').map do |heading|
+  def valid?(html)
+    headings = html.css('table thead tr th').map do |heading|
       heading.text.strip
     end
-    headings == ['Program', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    raise UnexpectedHtmlContentException.new('Mismatched table headings in location table', html, Location) unless headings == ['Program', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   end
 
   def to_json
@@ -47,8 +47,7 @@ end
 
 class Week
   def initialize(html)
-    @html = html
-    raise UnexpectedHtmlContentException.new('week',html) unless valid_header?
+    valid_header?(html)
     @program_identifer = html.css('td').first.css('div strong').text.strip
     # The gsub is necessary because sometimes the words are broken up inside with newlines
     week_identifier = html.css('td').first.css('> strong').text.strip.gsub(/\s+/, ' ')
@@ -59,7 +58,7 @@ class Week
     else
       @week_start = Time.parse("#{from_date}")
     end
-    raise UnexpectedHtmlContentException.new('week',html) unless valid_week_start?
+    valid_week_start?(@week_start, html)
     @days = html.css('td')[1..7].each_with_index.map do |day_html, index|
       # For each day offset from Sunday, add a day to the "week_start" so we know what day this is
       seconds_to_add = index * 60*60*24
@@ -67,15 +66,16 @@ class Week
     end
   end
 
-  def valid_header?
-    columns = @html.css('td').map do |column|
+  def valid_header?(html)
+    columns = html.css('td').map do |column|
       column.attribute('data-info').value
     end
-    columns == ['Program', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    raise UnexpectedHtmlContentException.new('Mismatched table headings in week', html, Week) unless columns == ['Program', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   end
-  def valid_week_start?
+
+  def valid_week_start?(week_start, html)
     # Because every table starts at sunday, we expect the date range specified to always begin on a Sunday
-    @week_start.strftime("%w") == "0"
+    raise UnexpectedHtmlContentException.new('Week does not start on Sunday as expected', html, Week) unless week_start.strftime("%w") == "0"
   end
 
   def to_json
@@ -89,21 +89,20 @@ end
 
 class Day
   def initialize(html, date)
-    @html = html
-    @date = date
-    @has_time = @html.text.match(/[0-9]/)
-    raise UnexpectedHtmlContentException.new('day',html) unless valid?
+    @has_time = !html.text.match(/[0-9]/).nil?
+    valid?(html)
+    return unless @has_time
     @times = html.children.select do |node|
       node.is_a? Nokogiri::XML::Text
     end
     .map(&:text)
     .map do |time_range_string|
-      TimeRange.new(time_range_string, @date)
+      TimeRange.new(time_range_string, date)
     end
   end
   
-  def valid?
-    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].include?(@html.attribute('data-info').value)
+  def valid?(html)
+    raise UnexpectedHtmlContentException.new('Day specified in column is not in expected range', html, Day) unless ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].include?(html.attribute('data-info').value)
   end
 
   def to_json
@@ -118,7 +117,7 @@ class TimeRange
   TIME_RANGE_REGEXP = /(\d{1,2})(:(\d{1,2}))?(am|pm)? - (\d{1,2})(:(\d{1,2}))?(am|pm)?/
   def initialize(range_string, date)
     @range_string = range_string
-    raise UnexpectedHtmlContentException.new('location',html) unless valid?
+    raise StandardError.new("Invalid TimeRange string: '#{range_string}'") unless valid?
     normalized_times = TimeRange.normalize_times(range_string)
     @from = TimeRange.add_hours_to_date(normalized_times[0], date)
     @to = TimeRange.add_hours_to_date(normalized_times[1], date)
