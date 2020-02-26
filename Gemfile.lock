@@ -6,7 +6,7 @@ GEM
     debase-ruby_core_source (0.10.8)
     mini_portile2 (2.4.0)
     minitest (5.13.0)
-    nokogiri (1.10.7)
+    nokogiri (1.10.8)
       mini_portile2 (~> 2.4.0)
     rake (13.0.1)
     ruby-debug-ide (0.7.0)
